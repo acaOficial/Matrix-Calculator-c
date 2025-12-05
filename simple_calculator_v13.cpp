@@ -197,6 +197,8 @@ Token Token_stream::get()
   char ch;
   //cin >> ch;
   do { cin.get(ch); } while(isspace(ch));
+  cout << "[DEBUG] get(): tokenizing char = '" << ch << "'\n";
+
   switch (ch) 
   {
     case '(': case ')': 
@@ -281,6 +283,16 @@ struct Value
     :name(n), value(v), is_const(is_constant) 
   {}
 };
+
+// Añadido
+struct UserFunction {
+  vector<string> args;   // nombres de argumentos
+  string body;           // expresión en texto crudo
+};
+
+map<string, UserFunction> user_functions;
+
+
 
 map<string,Value> names;
 
@@ -452,7 +464,66 @@ gv primary()
     else if(t.is_symbol('~')) return ~primary();
   }
   else if(t.kind==Token::id::number) return gv(t.value);
-  else if(t.kind==Token::id::name_token) return get_value(t.name);
+
+  // Añadido
+  else if (t.kind == Token::id::name_token) {
+
+    string fname = t.name;
+    Token next = ts.get();
+    cout << "[DEBUG] primary(): name_token '" << fname << "', next kind=" << next.kind << " symbol='" << next.symbol << "'" << endl; // Añadido
+
+    // ------------------------------
+    // LLAMADA A FUNCIÓN DEFINIDA POR USUARIO
+    // ------------------------------
+    if (next.is_symbol('(')) {
+      cout << "[DEBUG] primary(): detected function call for '" << fname << "'" << endl; // Añadido
+      vector<gv> args;
+
+      Token x = ts.get();
+      if (!x.is_symbol(')')) {
+        ts.unget(x);
+        args.push_back(expression());
+
+        while (true) {
+          Token comma = ts.get();
+          if (comma.is_symbol(')')) break;
+          if (!comma.is_symbol(',')) error("',' expected");
+          args.push_back(expression());
+        }
+      }
+
+      auto it = user_functions.find(fname);
+      if (it == user_functions.end()) 
+        error("Undefined function: ", fname);
+
+      auto &fun = it->second;
+
+      if (args.size() != fun.args.size())
+        error("Wrong number of arguments in call to ", fname);
+
+      // Guardar entorno actual
+      map<string, Value> backup = names;
+
+      // Insertar argumentos como variables temporales
+      for (size_t i = 0; i < args.size(); i++)
+        define_name(fun.args[i], args[i], false);
+
+      // Inyectar el cuerpo
+      stringstream ss(fun.body);
+      cin.rdbuf(ss.rdbuf());
+
+      gv result = expression();
+
+      // Restaurar entorno
+      names = backup;
+
+      return result;
+    }
+
+    ts.unget(next);
+    return get_value(fname);
+  }
+
 
   error("primary expected");
 }
@@ -490,6 +561,24 @@ gv expression()
     else if(t.is_symbol('-')) left=left-term();
     else { ts.unget(t); return left; }
   }
+}
+
+
+// Añadido
+
+bool is_user_function_definition(Token t)
+{
+  if (t.kind != Token::id::name_token) return false;
+
+  Token next = ts.get();
+  if (!next.is_symbol('(')) { 
+      ts.unget(next);
+      return false; 
+  }
+
+  ts.unget(next);
+  ts.unget(t);
+  return true;
 }
 
 gv assign()
@@ -537,13 +626,64 @@ gv constant_assign()
   return v;
 }
 
+// Añadido
+
+void define_user_function()
+{
+  cout << "[DEBUG] define_user_function() called" << endl; // Añadido
+  Token t = ts.get();
+  cout << "[DEBUG] define_user_function(): got token kind=" << t.kind << " name='" << t.name << "'" << endl; // Añadido
+  string fname = t.name;
+
+  Token lp = ts.get();
+  cout << "[DEBUG] define_user_function(): expecting '(', got kind=" << lp.kind << " symbol='" << lp.symbol << "'" << endl; // Añadido
+  if (!lp.is_symbol('(')) error("'(' expected in function definition");
+
+  vector<string> params;
+  Token p = ts.get();
+  cout << "[DEBUG] define_user_function(): checking params, got kind=" << p.kind << " name='" << p.name << "'" << endl; // Añadido
+
+  if (!p.is_symbol(')')) {
+    if (p.kind != Token::id::name_token) error("parameter name expected");
+    cout << "[DEBUG] define_user_function(): adding param '" << p.name << "'" << endl; // Añadido
+    params.push_back(p.name);
+
+    while (true) {
+      Token comma = ts.get();
+      if (comma.is_symbol(')')) break;
+      if (!comma.is_symbol(',')) error("',' expected");
+
+      Token p2 = ts.get();
+      if (p2.kind != Token::id::name_token) error("parameter name expected");
+      params.push_back(p2.name);
+    }
+  }
+
+  Token eq = ts.get();
+  cout << "[DEBUG] define_user_function(): expecting '=', got kind=" << eq.kind << " symbol='" << eq.symbol << "'" << endl; // Añadido
+  if (!eq.is_symbol('=')) error("'=' expected in function definition");
+
+  string body;
+  getline(cin, body, ';');
+  cout << "[DEBUG] define_user_function(): body = '" << body << "'" << endl; // Añadido
+
+  user_functions[fname] = UserFunction{params, body};
+  cout << "[DEBUG] define_user_function(): function '" << fname << "' defined with " << params.size() << " params" << endl; // Añadido
+}
+
+
 gv statement()
 {
+  
   #if DEBUG_FUNC
     cout<<__func__<<std::endl;
   #endif // DEBUG_FUNC
          
   Token t=ts.get();
+
+  cout << "[DEBUG] statement(): token.kind=" << t.kind 
+    << " name=" << t.name 
+    << " symbol=" << t.symbol << endl;
 
   switch(t.kind)
   {
@@ -552,12 +692,33 @@ gv statement()
       break;
 
     case Token::id::name_token:
-      {
-        Token tt=ts.get();
-        if(tt.is_symbol('=')) { ts.unget(t); ts.unget(tt); return assign(); }
-        else { ts.unget(t); ts.unget(tt); return expression(); }
+    {
+      Token tt = ts.get();
+      cout << "[DEBUG] statement(): after name_token '" << t.name << "', got kind=" << tt.kind << " symbol='" << tt.symbol << "'" << endl; // Añadido
+
+      // DETECCIÓN DE DEFINICIÓN DE FUNCIÓN
+      if (tt.is_symbol('(')) {
+        cout << "[DEBUG] statement(): detected '(' after name, checking if it's function definition..." << endl; // Añadido
+        ts.unget(t);  // Añadido: invertido el orden - primero el nombre
+        ts.unget(tt); // Añadido: luego el paréntesis
+        define_user_function();
+        return gv(0.0);
       }
-      break;
+
+      // ASIGNACIÓN NORMAL
+      if (tt.is_symbol('=')) {
+        ts.unget(tt);
+        ts.unget(t);
+        return assign();
+      }
+
+      // CUALQUIER OTRA COSA → EXPRESIÓN
+      ts.unget(tt);
+      ts.unget(t);
+      return expression();
+    }
+    break;
+
 
     default:
       { ts.unget(t); return expression(); }

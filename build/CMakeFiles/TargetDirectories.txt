@@ -1,0 +1,5 @@
+/mnt/c/Users/acaim/OneDrive/Desktop/MASTER/PP/Ejercicios/C++/Ejercicio 2/build/CMakeFiles/testing_mat_lib.dir
+/mnt/c/Users/acaim/OneDrive/Desktop/MASTER/PP/Ejercicios/C++/Ejercicio 2/build/CMakeFiles/testing_generic_value.dir
+/mnt/c/Users/acaim/OneDrive/Desktop/MASTER/PP/Ejercicios/C++/Ejercicio 2/build/CMakeFiles/simple_calculator_v13.dir
+/mnt/c/Users/acaim/OneDrive/Desktop/MASTER/PP/Ejercicios/C++/Ejercicio 2/build/CMakeFiles/edit_cache.dir
+/mnt/c/Users/acaim/OneDrive/Desktop/MASTER/PP/Ejercicios/C++/Ejercicio 2/build/CMakeFiles/rebuild_cache.dir
