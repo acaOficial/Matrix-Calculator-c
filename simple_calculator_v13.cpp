@@ -175,7 +175,7 @@ struct Token
 class Token_stream 
 { 
   private:
-
+    //Añadido, ahora es una deque
     deque<Token> buffer; 
     
   public: 
@@ -183,9 +183,17 @@ class Token_stream
     Token_stream() { } 
     Token get(); 
     void unget(Token t) { buffer.push_front(t); } 
+
+    // Añadido
     void clear() { buffer.clear(); }
+
+    // Añadido
     deque<Token> save_buffer() { return buffer; }
+
+    // Añadido
+
     void restore_buffer(const deque<Token>& saved) { buffer = saved; }
+
     void ignore();
 };
 
@@ -201,7 +209,6 @@ Token Token_stream::get()
   char ch;
   //cin >> ch;
   do { cin.get(ch); } while(isspace(ch));
-  cout << "[DEBUG] get(): tokenizing char = '" << ch << "'\n";
 
   switch (ch) 
   {
@@ -290,8 +297,8 @@ struct Value
 
 // Añadido
 struct UserFunction {
-  vector<string> args;   // nombres de argumentos
-  string body;           // expresión en texto crudo
+  vector<string> args;
+  string body;
 };
 
 map<string, UserFunction> user_functions;
@@ -428,61 +435,54 @@ gv columns()
 // Añadido
 gv evaluate_user_function_call(const string& fname, const vector<gv>& args) 
 {
-    cout << "[DEBUG] evaluate_user_function_call(): fname=" << fname 
-         << ", args=" << args.size() << endl;
+  auto it = user_functions.find(fname);
+  if (it == user_functions.end())
+    error("Undefined function: ", fname);
 
-    auto it = user_functions.find(fname);
-    if (it == user_functions.end())
-        error("Undefined function: ", fname);
+  const UserFunction& fun = it->second;
 
-    const UserFunction& fun = it->second;
+  if (args.size() != fun.args.size())
+    error("Wrong number of arguments in call to ", fname);
 
-    if (args.size() != fun.args.size())
-        error("Wrong number of arguments in call to ", fname);
+  // Guardar entorno actual
+  map<string, Value> backup = names;
+  
+  // Guardar buffer de tokens
+  auto saved_buffer = ts.save_buffer();
 
-    // Guardar entorno actual
-    map<string, Value> backup = names;
-    
-    // Guardar buffer de tokens
-    auto saved_buffer = ts.save_buffer();
+  // Crear variables locales para los parámetros
+  for (size_t i = 0; i < args.size(); i++) {
+    define_name(fun.args[i], args[i], false);
+  }
 
-    // Crear variables locales para los parámetros
-    for (size_t i = 0; i < args.size(); i++) {
-        cout << "[DEBUG] evaluate_user_function_call(): setting param " << fun.args[i] 
-             << " = " << args[i] << endl;
-        define_name(fun.args[i], args[i], false);
-    }
+  // Preparar un stream con el cuerpo y guardar el buffer original de cin
+  stringstream ss(fun.body);
+  auto* old_buf = cin.rdbuf(ss.rdbuf());
 
-    // Preparar un stream con el cuerpo y guardar el buffer original de cin
-    stringstream ss(fun.body);
-    auto* old_buf = cin.rdbuf(ss.rdbuf());
+  ts.clear();
 
-    cout << "[DEBUG] evaluate_user_function_call(): about to evaluate body: '" << fun.body << "'" << endl;
-    ts.clear();
-
-    // Evaluar la expresión
-    gv result;
-    try {
-        result = expression();
-        cout << "[DEBUG] evaluate_user_function_call(): result = " << result << endl;
-    } catch (...) {
-        // Asegurar que restauramos cin incluso si hay error
-        cin.rdbuf(old_buf);
-        ts.restore_buffer(saved_buffer);
-        names = backup;
-        throw;
-    }
-
-    // Restaurar el buffer original de cin
+  // Evaluar la expresión
+  gv result;
+  try {
+    result = expression();
+  } catch (...) {
+    // Asegurar que restauramos cin incluso si hay error
     cin.rdbuf(old_buf);
-    
-    // Restaurar buffer de tokens (elimina tokens del cuerpo de la función y recupera los originales)
     ts.restore_buffer(saved_buffer);
-
-    // Restaurar entorno
     names = backup;
+    throw;
+  }
 
-    return result;
+  // Restaurar el buffer original de cin
+  cin.rdbuf(old_buf);
+  
+  // Restaurar buffer de tokens (elimina tokens del cuerpo de la función y recupera los originales)
+  ts.restore_buffer(saved_buffer);
+
+  // Restaurar entorno
+  names = backup;
+
+  return result;
 }
 
 gv primary()
@@ -535,51 +535,39 @@ gv primary()
 
     string fname = t.name;
     Token next = ts.get();
-    cout << "[DEBUG] primary(): name_token '" << fname << "', next kind=" << next.kind << " symbol='" << next.symbol << "'" << endl; // Añadido
 
     // ------------------------------
     // LLAMADA A FUNCIÓN DEFINIDA POR USUARIO
     // ------------------------------
     if (next.is_symbol('(')) {
-      cout << "[DEBUG] primary(): detected function call for '" << fname << "'" << endl;
       vector<gv> args;
 
       Token x = ts.get();
-      cout << "[DEBUG] primary(): reading first arg token: kind=" << x.kind << " symbol='" << x.symbol << "' name='" << x.name << "'" << endl;
       
       if (!x.is_symbol(')')) {
-        cout << "[DEBUG] primary(): not ')', ungetting and calling expression()" << endl;
         ts.unget(x);
         
-        cout << "[DEBUG] primary(): about to call expression() for first arg" << endl;
         args.push_back(expression());
-        cout << "[DEBUG] primary(): first arg evaluated, result=" << args[0] << endl;
 
         while (true) {
           Token comma = ts.get();
-          cout << "[DEBUG] primary(): after arg, got token: kind=" << comma.kind << " symbol='" << comma.symbol << "'" << endl;
           
           if (comma.is_symbol(')')) {
-            cout << "[DEBUG] primary(): found ')', ending arg list" << endl;
             break;
           }
           
           if (!comma.is_symbol(',')) 
-              error("',' expected");
+            error("',' expected");
           
-          cout << "[DEBUG] primary(): found ',', reading next arg" << endl;
           args.push_back(expression());
-          cout << "[DEBUG] primary(): arg evaluated, result=" << args.back() << endl;
         }
       }
 
-      cout << "[DEBUG] primary(): all args read, total=" << args.size() << endl;
       
       auto it = user_functions.find(fname);
       if (it == user_functions.end())
-          error("Undefined function: ", fname);
+        error("Undefined function: ", fname);
 
-      cout << "[DEBUG] primary(): calling evaluate_user_function_call()" << endl;
       return evaluate_user_function_call(fname, args);
     }
 
@@ -693,22 +681,17 @@ gv constant_assign()
 
 void define_user_function()
 {
-  cout << "[DEBUG] define_user_function() called" << endl; // Añadido
   Token t = ts.get();
-  cout << "[DEBUG] define_user_function(): got token kind=" << t.kind << " name='" << t.name << "'" << endl; // Añadido
   string fname = t.name;
 
   Token lp = ts.get();
-  cout << "[DEBUG] define_user_function(): expecting '(', got kind=" << lp.kind << " symbol='" << lp.symbol << "'" << endl; // Añadido
   if (!lp.is_symbol('(')) error("'(' expected in function definition");
 
   vector<string> params;
   Token p = ts.get();
-  cout << "[DEBUG] define_user_function(): checking params, got kind=" << p.kind << " name='" << p.name << "'" << endl; // Añadido
 
   if (!p.is_symbol(')')) {
     if (p.kind != Token::id::name_token) error("parameter name expected");
-    cout << "[DEBUG] define_user_function(): adding param '" << p.name << "'" << endl; // Añadido
     params.push_back(p.name);
 
     while (true) {
@@ -723,16 +706,13 @@ void define_user_function()
   }
 
   Token eq = ts.get();
-  cout << "[DEBUG] define_user_function(): expecting '=', got kind=" << eq.kind << " symbol='" << eq.symbol << "'" << endl; // Añadido
   if (!eq.is_symbol('=')) error("'=' expected in function definition");
 
     string body;
     getline(cin, body, ';');
     body += ";";
-  cout << "[DEBUG] define_user_function(): body = '" << body << "'" << endl; // Añadido
 
   user_functions[fname] = UserFunction{params, body};
-  cout << "[DEBUG] define_user_function(): function '" << fname << "' defined with " << params.size() << " params" << endl; // Añadido
 }
 
 
@@ -745,10 +725,6 @@ gv statement()
          
   Token t=ts.get();
 
-  cout << "[DEBUG] statement(): token.kind=" << t.kind 
-    << " name=" << t.name 
-    << " symbol=" << t.symbol << endl;
-
   switch(t.kind)
   {
     case Token::id::const_token:
@@ -758,24 +734,19 @@ gv statement()
     case Token::id::name_token:
     {
       Token tt = ts.get();
-      cout << "[DEBUG] statement(): after name_token '" << t.name << "', got kind=" << tt.kind << " symbol='" << tt.symbol << "'" << endl; // Añadido
 
-      // DETECCIÓN DE DEFINICIÓN DE FUNCIÓN vs LLAMADA
       if (tt.is_symbol('(')) {
-        cout << "[DEBUG] statement(): detected '(' after name, checking if definition or call..." << endl;
         
         // Necesitamos ver qué hay después del paréntesis de cierre para distinguir
         // Guardamos tokens temporalmente para inspeccionar
         vector<Token> temp_tokens;
         temp_tokens.push_back(tt); // el '('
         
-        cout << "[DEBUG] reading tokens until ')' to check what follows..." << endl;
         
         // Leer hasta encontrar el ')' correspondiente
         int paren_count = 1;
         while (paren_count > 0) {
           Token next = ts.get();
-          cout << "[DEBUG] read token: kind=" << next.kind << " symbol='" << next.symbol << "' name='" << next.name << "'" << endl;
           temp_tokens.push_back(next);
           if (next.is_symbol('(')) paren_count++;
           else if (next.is_symbol(')')) paren_count--;
@@ -783,26 +754,16 @@ gv statement()
         
         // Ahora miramos qué hay después del ')'
         Token after_paren = ts.get();
-        cout << "[DEBUG] statement(): after closing ')', got token: kind=" << after_paren.kind << " symbol='" << after_paren.symbol << "'" << endl;
         
         // Si hay '=' después del ')', es DEFINICIÓN
         if (after_paren.is_symbol('=')) {
-          cout << "[DEBUG] statement(): it's a function DEFINITION" << endl;
           temp_tokens.push_back(after_paren); // Incluir el '=' en el buffer
-          
-          cout << "[DEBUG] Now ungetting all tokens. temp_tokens.size()=" << temp_tokens.size() << endl;
-          
-          // Con deque y push_front, necesitamos hacer unget en ORDEN INVERSO
-          // para que salgan en el orden correcto
           
           // Primero devolver los tokens en orden inverso
           for (auto it = temp_tokens.rbegin(); it != temp_tokens.rend(); ++it) {
-            cout << "[DEBUG] ungetting: kind=" << it->kind << " symbol='" << it->symbol << "' name='" << it->name << "'" << endl;
             ts.unget(*it);
           }
           
-          // Luego el nombre (para que salga primero)
-          cout << "[DEBUG] ungetting name token: '" << t.name << "'" << endl;
           ts.unget(t);
           
           define_user_function();
@@ -810,24 +771,17 @@ gv statement()
         }
         // Si no hay '=', es una LLAMADA (expresión)
         else {
-          cout << "[DEBUG] statement(): it's a function CALL (expression)" << endl;
-          
-          cout << "[DEBUG] Now ungetting all tokens. temp_tokens.size()=" << temp_tokens.size() << endl;
-          
+
           // Con deque y push_front, hacer unget en orden inverso
           
-          // Primero el after_paren
-          cout << "[DEBUG] ungetting after_paren: kind=" << after_paren.kind << " symbol='" << after_paren.symbol << "'" << endl;
           ts.unget(after_paren);
           
           // Luego los tokens en orden inverso
           for (auto it = temp_tokens.rbegin(); it != temp_tokens.rend(); ++it) {
-            cout << "[DEBUG] ungetting: kind=" << it->kind << " symbol='" << it->symbol << "' name='" << it->name << "'" << endl;
             ts.unget(*it);
           }
           
           // Finalmente el nombre (para que salga primero)
-          cout << "[DEBUG] ungetting name token: '" << t.name << "'" << endl;
           ts.unget(t);
           
           return expression();
