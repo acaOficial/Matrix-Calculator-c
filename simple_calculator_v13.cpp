@@ -183,8 +183,10 @@ class Token_stream
     Token_stream() { } 
     Token get(); 
     void unget(Token t) { buffer.push_front(t); } 
-    void ignore();
     void clear() { buffer.clear(); }
+    deque<Token> save_buffer() { return buffer; }
+    void restore_buffer(const deque<Token>& saved) { buffer = saved; }
+    void ignore();
 };
 
 Token Token_stream::get()
@@ -440,6 +442,9 @@ gv evaluate_user_function_call(const string& fname, const vector<gv>& args)
 
     // Guardar entorno actual
     map<string, Value> backup = names;
+    
+    // Guardar buffer de tokens
+    auto saved_buffer = ts.save_buffer();
 
     // Crear variables locales para los parámetros
     for (size_t i = 0; i < args.size(); i++) {
@@ -463,12 +468,16 @@ gv evaluate_user_function_call(const string& fname, const vector<gv>& args)
     } catch (...) {
         // Asegurar que restauramos cin incluso si hay error
         cin.rdbuf(old_buf);
+        ts.restore_buffer(saved_buffer);
         names = backup;
         throw;
     }
 
     // Restaurar el buffer original de cin
     cin.rdbuf(old_buf);
+    
+    // Restaurar buffer de tokens (elimina tokens del cuerpo de la función y recupera los originales)
+    ts.restore_buffer(saved_buffer);
 
     // Restaurar entorno
     names = backup;
@@ -549,10 +558,18 @@ gv primary()
         while (true) {
           Token comma = ts.get();
           cout << "[DEBUG] primary(): after arg, got token: kind=" << comma.kind << " symbol='" << comma.symbol << "'" << endl;
-          if (comma.is_symbol(')')) break;
-          if (!comma.is_symbol(',')) error("',' expected");
+          
+          if (comma.is_symbol(')')) {
+            cout << "[DEBUG] primary(): found ')', ending arg list" << endl;
+            break;
+          }
+          
+          if (!comma.is_symbol(',')) 
+              error("',' expected");
+          
           cout << "[DEBUG] primary(): found ',', reading next arg" << endl;
           args.push_back(expression());
+          cout << "[DEBUG] primary(): arg evaluated, result=" << args.back() << endl;
         }
       }
 
@@ -709,9 +726,9 @@ void define_user_function()
   cout << "[DEBUG] define_user_function(): expecting '=', got kind=" << eq.kind << " symbol='" << eq.symbol << "'" << endl; // Añadido
   if (!eq.is_symbol('=')) error("'=' expected in function definition");
 
-  string body;
-  getline(cin, body, ';');
-  body += ";";
+    string body;
+    getline(cin, body, ';');
+    body += ";";
   cout << "[DEBUG] define_user_function(): body = '" << body << "'" << endl; // Añadido
 
   user_functions[fname] = UserFunction{params, body};
