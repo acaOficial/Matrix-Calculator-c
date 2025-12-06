@@ -492,7 +492,6 @@ gv primary()
   #endif // DEBUG_FUNC
          
   Token t=ts.get();
-  cout << "[DEBUG] primary(): got token kind=" << t.kind << " symbol='" << t.symbol << "' name='" << t.name << "'" << endl;
 
   if(t.is_function()) { ts.unget(t); return function_name(); }
   else if(t.kind==Token::id::char_token)
@@ -733,73 +732,60 @@ gv statement()
 
     case Token::id::name_token:
     {
-      Token tt = ts.get();
+        Token name = t;
+        Token next = ts.get();
 
-      if (tt.is_symbol('(')) {
-        
-        // Necesitamos ver qué hay después del paréntesis de cierre para distinguir
-        // Guardamos tokens temporalmente para inspeccionar
-        vector<Token> temp_tokens;
-        temp_tokens.push_back(tt); // el '('
-        
-        
-        // Leer hasta encontrar el ')' correspondiente
-        int paren_count = 1;
-        while (paren_count > 0) {
-          Token next = ts.get();
-          temp_tokens.push_back(next);
-          if (next.is_symbol('(')) paren_count++;
-          else if (next.is_symbol(')')) paren_count--;
+        // ------ CASO 1: f( ... ) ------
+        if (next.is_symbol('(')) {
+            
+            // Consumimos hasta el paréntesis de cierre SOLO para inspección
+            int level = 1;
+            vector<Token> args;
+            args.push_back(next);
+
+            while (level > 0) {
+                Token x = ts.get();
+                args.push_back(x);
+                if (x.is_symbol('(')) level++;
+                else if (x.is_symbol(')')) level--;
+            }
+
+            // Miramos el token que viene después de los parámetros
+            Token after = ts.get();
+
+            // ------ DEFINICIÓN ------
+            if (after.is_symbol('=')) {
+
+                // Restauramos todo en orden inverso
+                ts.unget(after);
+                for (auto it = args.rbegin(); it != args.rend(); ++it) ts.unget(*it);
+                ts.unget(name);
+
+                define_user_function();
+                return gv(0.0);
+            }
+
+            // ------ LLAMADA ------
+            ts.unget(after);
+            for (auto it = args.rbegin(); it != args.rend(); ++it) ts.unget(*it);
+            ts.unget(name);
+
+            return expression();
         }
-        
-        // Ahora miramos qué hay después del ')'
-        Token after_paren = ts.get();
-        
-        // Si hay '=' después del ')', es DEFINICIÓN
-        if (after_paren.is_symbol('=')) {
-          temp_tokens.push_back(after_paren); // Incluir el '=' en el buffer
-          
-          // Primero devolver los tokens en orden inverso
-          for (auto it = temp_tokens.rbegin(); it != temp_tokens.rend(); ++it) {
-            ts.unget(*it);
-          }
-          
-          ts.unget(t);
-          
-          define_user_function();
-          return gv(0.0);
+
+        // ------ CASO 2: x = ... ------
+        if (next.is_symbol('=')) {
+            ts.unget(next);
+            ts.unget(name);
+            return assign();
         }
-        // Si no hay '=', es una LLAMADA (expresión)
-        else {
 
-          // Con deque y push_front, hacer unget en orden inverso
-          
-          ts.unget(after_paren);
-          
-          // Luego los tokens en orden inverso
-          for (auto it = temp_tokens.rbegin(); it != temp_tokens.rend(); ++it) {
-            ts.unget(*it);
-          }
-          
-          // Finalmente el nombre (para que salga primero)
-          ts.unget(t);
-          
-          return expression();
-        }
-      }
-
-      // ASIGNACIÓN NORMAL
-      if (tt.is_symbol('=')) {
-        ts.unget(tt);
-        ts.unget(t);
-        return assign();
-      }
-
-      // CUALQUIER OTRA COSA → EXPRESIÓN
-      ts.unget(tt);
-      ts.unget(t);
-      return expression();
+        // ------ CASO 3: Nombre como expresión ------
+        ts.unget(next);
+        ts.unget(name);
+        return expression();
     }
+
     break;
 
 
