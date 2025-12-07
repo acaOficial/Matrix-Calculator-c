@@ -175,7 +175,7 @@ struct Token
 class Token_stream 
 { 
   private:
-    //Añadido, ahora es una deque
+    //Añadido
     deque<Token> buffer; 
     
   public: 
@@ -186,12 +186,7 @@ class Token_stream
 
     // Añadido
     void clear() { buffer.clear(); }
-
-    // Añadido
     deque<Token> save_buffer() { return buffer; }
-
-    // Añadido
-
     void restore_buffer(const deque<Token>& saved) { buffer = saved; }
 
     void ignore();
@@ -298,12 +293,12 @@ struct Value
 // Añadido
 struct UserFunction {
   vector<string> args;
-  vector<Token> body;  // Cuerpo como secuencia de tokens
+  vector<Token> body;
 };
 
 map<string, UserFunction> user_functions;
 
-// Añadido - Gestión de entorno con patrón RAII
+// Añadido
 class ScopeGuard {
 private:
   map<string, Value>& names_ref;
@@ -368,8 +363,8 @@ constexpr int default_precision=6;
 int precision=default_precision;
 
 gv expression();
+
 // Añadido
-// Helper function to parse function arguments
 vector<gv> parse_arguments() {
   vector<gv> args;
   
@@ -697,7 +692,6 @@ void define_function()
     tok = ts.get();
   }
   
-  // Agregar el token de print (';') al final
   body_tokens.push_back(tok);
 
   user_functions[fname] = UserFunction{params, body_tokens};
@@ -723,9 +717,8 @@ gv statement()
       Token name = t;
       Token next = ts.get();
 
-      // CASO 1: f(...) = ... (definición de función)
+      // definición de función
       if (next.is_symbol('(')) {
-        // Mirar si es definición consumiendo tokens
         vector<Token> lookahead;
         lookahead.push_back(next);
         
@@ -740,7 +733,6 @@ gv statement()
         Token after = ts.get();
         
         if (after.is_symbol('=')) {
-          // Es definición: restaurar y delegar
           ts.unget(after);
           for (auto it = lookahead.rbegin(); it != lookahead.rend(); ++it) 
             ts.unget(*it);
@@ -749,7 +741,6 @@ gv statement()
           return gv(0.0);
         }
         
-        // Es llamada/expresión: restaurar y delegar
         ts.unget(after);
         for (auto it = lookahead.rbegin(); it != lookahead.rend(); ++it) 
           ts.unget(*it);
@@ -757,14 +748,14 @@ gv statement()
         return expression();
       }
 
-      // CASO 2: x = ... (asignación)
+      // Cuando asigno
       if (next.is_symbol('=')) {
         ts.unget(next);
         ts.unget(name);
         return assign();
       }
 
-      // CASO 3: expresión simple
+      //  Cuando hay una expresión simple
       ts.unget(next);
       ts.unget(name);
       return expression();
