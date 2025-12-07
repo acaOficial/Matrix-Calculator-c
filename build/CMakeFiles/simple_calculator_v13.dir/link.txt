@@ -1,0 +1,1 @@
+/usr/bin/c++ -rdynamic CMakeFiles/simple_calculator_v13.dir/simple_calculator_v13.cpp.o -o simple_calculator_v13 

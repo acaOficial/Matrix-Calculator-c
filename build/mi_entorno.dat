@@ -1,0 +1,99 @@
+VARS 10
+VAR A 0
+MATRIX 2 2
+2 1
+1 3
+VAR B 0
+MATRIX 2 2
+4 7
+2 6
+VAR e 1
+SCALAR 2.71828
+VAR pi 1
+SCALAR 3.14159
+VAR testA 0
+SCALAR 100
+VAR testB 0
+SCALAR 200
+VAR v1 0
+MATRIX 1 3
+1 2 3
+VAR v2 0
+MATRIX 1 3
+4 5 6
+VAR x 0
+SCALAR 5
+VAR y 0
+SCALAR 10
+FUNCS 8
+FNAME add
+ARGS 2 a b
+BODY 4
+4 a
+6 +
+4 b
+2 0
+FNAME average
+ARGS 2 a b
+BODY 8
+6 (
+4 a
+6 +
+4 b
+6 )
+6 /
+3 2
+2 0
+FNAME cube
+ARGS 1 x
+BODY 6
+4 x
+6 *
+4 x
+6 *
+4 x
+2 0
+FNAME gaussian
+ARGS 1 x
+BODY 10
+8 exp
+6 (
+6 -
+4 x
+6 *
+4 x
+6 /
+3 2
+6 )
+2 0
+FNAME multiply
+ARGS 2 a b
+BODY 4
+4 a
+6 *
+4 b
+2 0
+FNAME sinc
+ARGS 1 x
+BODY 7
+8 sin
+6 (
+4 x
+6 )
+6 /
+4 x
+2 0
+FNAME square
+ARGS 1 x
+BODY 4
+4 x
+6 *
+4 x
+2 0
+FNAME testFunc
+ARGS 1 x
+BODY 4
+4 x
+6 *
+3 10
+2 0
