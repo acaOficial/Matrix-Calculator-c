@@ -391,23 +391,20 @@ string read_filename()
   string filename;
   char ch;
   
-  // Saltar espacios en blanco
   while (cin.get(ch) && isspace(ch));
   
   if (!cin) error("filename expected");
   
-  // Leer hasta encontrar ';' o espacio
   do {
     filename += ch;
   } while (cin.get(ch) && ch != ';' && !isspace(ch));
   
-  // Devolver el ';' al buffer si lo encontramos
   if (ch == ';') cin.unget();
   
   return filename;
 }
 
-// Añadido - Convert a token to its string representation
+// Añadido
 string token_to_string(const Token& t) {
   ostringstream oss;
   
@@ -425,7 +422,6 @@ string token_to_string(const Token& t) {
       oss << t.name;
       break;
     case Token::id::print:
-      // Don't include the print semicolon in the expression
       break;
     default:
       break;
@@ -434,15 +430,14 @@ string token_to_string(const Token& t) {
   return oss.str();
 }
 
-// Añadido - Convert vector of tokens to string
+// Añadido
 string tokens_to_string(const vector<Token>& tokens) {
   ostringstream oss;
   for (size_t i = 0; i < tokens.size(); i++) {
-    if (tokens[i].kind == Token::id::print) break;  // Stop at semicolon
+    if (tokens[i].kind == Token::id::print) break; 
     string s = token_to_string(tokens[i]);
     if (!s.empty()) {
       oss << s;
-      // Add space after certain tokens for readability
       if (i + 1 < tokens.size() && tokens[i+1].kind != Token::id::char_token) {
         if (tokens[i].kind == Token::id::name_token || 
             tokens[i].kind == Token::id::number) {
@@ -454,14 +449,13 @@ string tokens_to_string(const vector<Token>& tokens) {
   return oss.str();
 }
 
-// Añadido - Capture expression string from input buffer
+// Añadido
 string capture_expression_string() {
   vector<Token> expr_tokens;
   Token t;
   int paren_depth = 0;
   int brace_depth = 0;
   
-  // Read tokens until we hit a statement terminator
   while (true) {
     t = ts.get();
     
@@ -470,7 +464,6 @@ string capture_expression_string() {
     else if (t.is_symbol('{')) brace_depth++;
     else if (t.is_symbol('}')) brace_depth--;
     
-    // Stop at semicolon (print) when not inside parentheses or braces
     if (t.kind == Token::id::print && paren_depth == 0 && brace_depth == 0) {
       ts.unget(t);
       break;
@@ -625,20 +618,16 @@ gv evaluate_function(const string& fname, const vector<gv>& args)
   if (args.size() != fun.args.size())
     error("Wrong number of arguments in call to ", fname);
 
-  // ScopeGuard gestiona automáticamente la restauración de entorno y buffer
   ScopeGuard guard(names, ts);
 
-  // Crear variables locales para los parámetros
   for (size_t i = 0; i < args.size(); i++) {
     define_name(fun.args[i], args[i], false);
   }
 
-  // Inyectar tokens del cuerpo de la función en el buffer (en orden inverso)
   for (auto it = fun.body.rbegin(); it != fun.body.rend(); ++it) {
     ts.unget(*it);
   }
 
-  // Evaluar la expresión (ScopeGuard restaura todo automáticamente)
   return expression();
 }
 
@@ -693,7 +682,6 @@ gv primary()
     Token next = ts.get();
 
     if (next.is_symbol('(')) {
-      // Llamada a función definida por usuario
       vector<gv> args = parse_arguments();
       
       if (functions.find(fname) == functions.end())
@@ -809,11 +797,10 @@ void define_function()
   Token eq = ts.get();
   if (!eq.is_symbol('=')) error("'=' expected in function definition");
 
-  // Tokenizar el cuerpo de la función
   vector<Token> body_tokens;
   Token tok = ts.get();
   
-  while (tok.kind != Token::id::print) {  // Hasta encontrar ';'
+  while (tok.kind != Token::id::print) { 
     body_tokens.push_back(tok);
     tok = ts.get();
   }

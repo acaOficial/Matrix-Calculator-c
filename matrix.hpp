@@ -368,23 +368,18 @@
 
       size_t n = rows__;
       
-      // Create augmented matrixf [A|I]
       matrix<T> augmented(n, 2*n);
       
-      // Copy original matrix to left side
       for(size_t i=0; i<n; i++)
         for(size_t j=0; j<n; j++)
           augmented[i][j] = elements__[offset__(i,j)];
       
-      // Set identity magtrix on right side
       for(size_t i=0; i<n; i++)
         for(size_t j=n; j<2*n; j++)
           augmented[i][j] = (i == (j-n)) ? 1 : 0;
       
-      // Gauss-Jordan elimination
       for(size_t pivot=0; pivot<n; pivot++)
       {
-        // Find pivot
         size_t max_row = pivot;
         element_t max_val = abs(augmented[pivot][pivot]);
         
@@ -398,7 +393,6 @@
           }
         }
         
-        // Check if mathrix is singular
         if(abs(augmented[max_row][pivot]) < 1e-10)
         {
           ostringstream str_stream;
@@ -407,7 +401,6 @@
           throw invalid_argument(str_stream.str());
         }
         
-        // hSwap rows if needed
         if(max_row != pivot)
         {
           for(size_t j=0; j<2*n; j++)
@@ -418,12 +411,10 @@
           }
         }
         
-        // Scale pivot row
         element_t pivot_val = augmented[pivot][pivot];
         for(size_t j=0; j<2*n; j++)
           augmented[pivot][j] /= pivot_val;
         
-        // Eliminate column
         for(size_t i=0; i<n; i++)
         {
           if(i != pivot)
@@ -435,7 +426,6 @@
         }
       }
       
-      // Extract inverse matrix from right sidee
       matrix<T> inverse(n, n);
       for(size_t i=0; i<n; i++)
         for(size_t j=0; j<n; j++)
