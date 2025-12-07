@@ -99,6 +99,7 @@
 #include <map>
 #include <iomanip>
 #include <ios>
+#include <fstream>
 using namespace std;
 
 #include "generic_value.hpp"
@@ -133,7 +134,13 @@ struct Token
     help_token,
     function_token,
     precision_token,
-    set
+    set,
+
+    // Añadido
+    show_env_token,
+    save_env_token,
+    load_env_token,
+    env_token
   };
 
   id kind;
@@ -243,6 +250,12 @@ Token Token_stream::get()
         if(s=="help") return Token(Token::id::help_token);
         if(s=="set") return Token(Token::id::set);
         if(s=="precision") return Token(Token::id::precision_token);
+
+        // Añadido
+        if(s=="show") return Token(Token::id::show_env_token);
+        if(s=="save") return Token(Token::id::save_env_token);
+        if(s=="load") return Token(Token::id::load_env_token);
+        if(s=="env") return Token(Token::id::env_token);
 
         if(s=="sin") return Token(s,sin);
         if(s=="cos") return Token(s,cos);
@@ -363,6 +376,33 @@ constexpr int default_precision=6;
 int precision=default_precision;
 
 gv expression();
+
+// Añadido
+void show_env();
+void save_env_to_file(const string& fname);
+void load_env_from_file(const string& fname);
+
+// Función auxiliar para leer nombres de archivo (permite puntos y otros caracteres)
+string read_filename()
+{
+  string filename;
+  char ch;
+  
+  // Saltar espacios en blanco
+  while (cin.get(ch) && isspace(ch));
+  
+  if (!cin) error("filename expected");
+  
+  // Leer hasta encontrar ';' o espacio
+  do {
+    filename += ch;
+  } while (cin.get(ch) && ch != ';' && !isspace(ch));
+  
+  // Devolver el ';' al buffer si lo encontramos
+  if (ch == ';') cin.unget();
+  
+  return filename;
+}
 
 // Añadido
 vector<gv> parse_arguments() {
@@ -712,12 +752,13 @@ gv statement()
       return constant_assign();
       break;
 
+    // Añadido
     case Token::id::name_token:
     {
       Token name = t;
       Token next = ts.get();
 
-      // definición de función
+      // Detecciñon de definiciónd e funcione
       if (next.is_symbol('(')) {
         vector<Token> lookahead;
         lookahead.push_back(next);
@@ -762,6 +803,47 @@ gv statement()
     }
     break;
 
+    // Añadido
+    case Token::id::show_env_token:
+    {
+      Token next = ts.get();
+      if (next.kind != Token::id::env_token)
+        error("expected 'env' after show");
+
+      show_env();
+      return gv(0.0);
+    }
+    break;
+
+    case Token::id::save_env_token:
+    {
+      Token next = ts.get();
+      if (next.kind != Token::id::env_token)
+        error("expected 'env' after save");
+
+      string filename = read_filename();
+      if (filename.empty())
+        error("file name expected");
+
+      save_env_to_file(filename);
+      return gv(0.0);
+    }
+    break;
+
+    case Token::id::load_env_token:
+    {
+      Token next = ts.get();
+      if (next.kind != Token::id::env_token)
+        error("expected 'env' after load");
+
+      string filename = read_filename();
+      if (filename.empty())
+        error("file name expected");
+
+      load_env_from_file(filename);
+      return gv(0.0);
+    }
+    break;
 
     default:
     { ts.unget(t); return expression(); }
@@ -863,6 +945,186 @@ void set_precision()
   cout
     <<" precision set to "<<precision<<" digits\n"
   ;
+}
+
+// Añadido
+void show_env() 
+{
+  cout << "Environment variables:\n";
+  for (const auto& kv : names) {
+    cout << "  " << kv.first << " = " << kv.second.value;
+    if (kv.second.is_const) cout << " (const)";
+    cout << "\n";
+  }
+  
+  if (!user_functions.empty()) {
+    cout << "\nUser-defined functions:\n";
+    for (const auto& kv : user_functions) {
+      cout << "  " << kv.first << "(";
+      for (size_t i = 0; i < kv.second.args.size(); i++) {
+        if (i > 0) cout << ", ";
+        cout << kv.second.args[i];
+      }
+      cout << ")\n";
+    }
+  }
+}
+
+
+// Añadido
+void save_env_to_file(const string& fname)
+{
+  ofstream out(fname);
+  if (!out) error("Cannot open file for saving: ", fname);
+
+  // Guardar número de variables
+  out << "VARS " << names.size() << "\n";
+  
+  // Guardar variables
+  for (const auto& kv : names) {
+    gv temp_value = kv.second.value;
+    out << kv.first << " "
+        << temp_value.get<gv::scalar_t>() << " "
+        << kv.second.is_const << "\n";
+  }
+  
+  // Guardar número de funciones
+  out << "FUNCS " << user_functions.size() << "\n";
+  
+  // Guardar funciones
+  for (const auto& kv : user_functions) {
+    out << "FNAME " << kv.first << "\n";
+    out << "ARGS " << kv.second.args.size();
+    for (const auto& arg : kv.second.args) {
+      out << " " << arg;
+    }
+    out << "\n";
+    
+    // Guardar cuerpo de la función (serializar tokens)
+    out << "BODY " << kv.second.body.size() << "\n";
+    for (const auto& token : kv.second.body) {
+      out << static_cast<int>(token.kind) << " ";
+      
+      switch (token.kind) {
+        case Token::id::char_token:
+          out << token.symbol;
+          break;
+        case Token::id::number:
+          out << token.value;
+          break;
+        case Token::id::name_token:
+        case Token::id::function_token:
+          out << token.name;
+          break;
+        default:
+          out << "0"; // placeholder para otros tipos
+          break;
+      }
+      out << "\n";
+    }
+  }
+}
+
+// Añadido
+void load_env_from_file(const string& fname)
+{
+  ifstream in(fname);
+  if (!in) error("Cannot open file for loading: ", fname);
+
+  string keyword;
+  
+  // Cargar variables
+  in >> keyword;
+  if (keyword != "VARS") error("Invalid file format: expected VARS");
+  
+  size_t num_vars;
+  in >> num_vars;
+  
+  for (size_t i = 0; i < num_vars; i++) {
+    string name;
+    double val;
+    int is_const;
+    in >> name >> val >> is_const;
+    define_name(name, gv(val), is_const != 0);
+  }
+  
+  // Cargar funciones
+  in >> keyword;
+  if (keyword != "FUNCS") error("Invalid file format: expected FUNCS");
+  
+  size_t num_funcs;
+  in >> num_funcs;
+  
+  for (size_t i = 0; i < num_funcs; i++) {
+    in >> keyword;
+    if (keyword != "FNAME") error("Invalid file format: expected FNAME");
+    
+    string func_name;
+    in >> func_name;
+    
+    in >> keyword;
+    if (keyword != "ARGS") error("Invalid file format: expected ARGS");
+    
+    size_t num_args;
+    in >> num_args;
+    
+    vector<string> args;
+    for (size_t j = 0; j < num_args; j++) {
+      string arg;
+      in >> arg;
+      args.push_back(arg);
+    }
+    
+    in >> keyword;
+    if (keyword != "BODY") error("Invalid file format: expected BODY");
+    
+    size_t num_tokens;
+    in >> num_tokens;
+    
+    vector<Token> body;
+    for (size_t j = 0; j < num_tokens; j++) {
+      int kind;
+      in >> kind;
+      
+      Token tok;
+      tok.kind = static_cast<Token::id>(kind);
+      
+      switch (tok.kind) {
+        case Token::id::char_token:
+        {
+          char sym;
+          in >> sym;
+          tok.symbol = sym;
+          break;
+        }
+        case Token::id::number:
+        {
+          double val;
+          in >> val;
+          tok.value = val;
+          break;
+        }
+        case Token::id::name_token:
+        case Token::id::function_token:
+        {
+          string name;
+          in >> name;
+          tok.name = name;
+          break;
+        }
+        default:
+        {
+          string dummy;
+          in >> dummy;
+          break;
+        }
+      }
+      
+      body.push_back(tok);
+    }
+    
+    user_functions[func_name] = UserFunction{args, body};
+  }
 }
 
 const string prompt = "> ";
