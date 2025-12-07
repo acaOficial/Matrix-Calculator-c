@@ -1,0 +1,1 @@
+/usr/bin/c++ -rdynamic CMakeFiles/testing_mat_lib.dir/testing_mat_lib.cpp.o -o testing_mat_lib 

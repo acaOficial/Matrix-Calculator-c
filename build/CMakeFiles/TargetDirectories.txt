@@ -1,0 +1,5 @@
+/mnt/c/Users/acaim/OneDrive/Desktop/MASTER/PP/Ejercicios/C++/Ejercicio 2/Entregas/Ejercicio 13/Matrix-Calculator-c/build/CMakeFiles/testing_mat_lib.dir
+/mnt/c/Users/acaim/OneDrive/Desktop/MASTER/PP/Ejercicios/C++/Ejercicio 2/Entregas/Ejercicio 13/Matrix-Calculator-c/build/CMakeFiles/testing_generic_value.dir
+/mnt/c/Users/acaim/OneDrive/Desktop/MASTER/PP/Ejercicios/C++/Ejercicio 2/Entregas/Ejercicio 13/Matrix-Calculator-c/build/CMakeFiles/simple_calculator_v13.dir
+/mnt/c/Users/acaim/OneDrive/Desktop/MASTER/PP/Ejercicios/C++/Ejercicio 2/Entregas/Ejercicio 13/Matrix-Calculator-c/build/CMakeFiles/edit_cache.dir
+/mnt/c/Users/acaim/OneDrive/Desktop/MASTER/PP/Ejercicios/C++/Ejercicio 2/Entregas/Ejercicio 13/Matrix-Calculator-c/build/CMakeFiles/rebuild_cache.dir
