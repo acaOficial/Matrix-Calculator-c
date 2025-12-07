@@ -181,7 +181,6 @@ struct Token
 class Token_stream 
 { 
   private:
-
     //Añadido
     deque<Token> buffer; 
     
@@ -295,11 +294,12 @@ struct Value
   string name;
   gv value;
   bool is_const;
+  string expr;  // Expression string
 
-  Value() :name{}, value{double(0)}, is_const{false} {}
+  Value() :name{}, value{double(0)}, is_const{false}, expr{} {}
 
-  Value(const string& n, const gv& v, bool is_constant=false) 
-    :name(n), value(v), is_const(is_constant) 
+  Value(const string& n, const gv& v, bool is_constant=false, const string& expression="") 
+    :name(n), value(v), is_const(is_constant), expr(expression) 
   {}
 };
 
@@ -367,8 +367,8 @@ bool is_constant(const string& s)
 
 bool is_declared(const string& s) { return (names.find(s)!=names.end()); }
 
-void define_name(const string& s, const gv& d, bool constant=false)
-{ names[s]=Value(s,d,constant); }
+void define_name(const string& s, const gv& d, bool constant=false, const string& expr="")
+{ names[s]=Value(s,d,constant,expr); }
 
 Token_stream ts;
 
@@ -381,6 +381,8 @@ gv expression();
 void show_env();
 void save_env_to_file(const string& fname);
 void load_env_from_file(const string& fname);
+string capture_expression_string();
+string tokens_to_string(const vector<Token>& tokens);
 
 
 string read_filename()
@@ -388,17 +390,100 @@ string read_filename()
   string filename;
   char ch;
   
+  // Saltar espacios en blanco
   while (cin.get(ch) && isspace(ch));
-
+  
   if (!cin) error("filename expected");
   
+  // Leer hasta encontrar ';' o espacio
   do {
     filename += ch;
   } while (cin.get(ch) && ch != ';' && !isspace(ch));
   
+  // Devolver el ';' al buffer si lo encontramos
   if (ch == ';') cin.unget();
   
   return filename;
+}
+
+// Añadido - Convert a token to its string representation
+string token_to_string(const Token& t) {
+  ostringstream oss;
+  
+  switch(t.kind) {
+    case Token::id::number:
+      oss << t.value;
+      break;
+    case Token::id::name_token:
+      oss << t.name;
+      break;
+    case Token::id::char_token:
+      oss << t.symbol;
+      break;
+    case Token::id::function_token:
+      oss << t.name;
+      break;
+    case Token::id::print:
+      // Don't include the print semicolon in the expression
+      break;
+    default:
+      break;
+  }
+  
+  return oss.str();
+}
+
+// Añadido - Convert vector of tokens to string
+string tokens_to_string(const vector<Token>& tokens) {
+  ostringstream oss;
+  for (size_t i = 0; i < tokens.size(); i++) {
+    if (tokens[i].kind == Token::id::print) break;  // Stop at semicolon
+    string s = token_to_string(tokens[i]);
+    if (!s.empty()) {
+      oss << s;
+      // Add space after certain tokens for readability
+      if (i + 1 < tokens.size() && tokens[i+1].kind != Token::id::char_token) {
+        if (tokens[i].kind == Token::id::name_token || 
+            tokens[i].kind == Token::id::number) {
+          oss << " ";
+        }
+      }
+    }
+  }
+  return oss.str();
+}
+
+// Añadido - Capture expression string from input buffer
+string capture_expression_string() {
+  vector<Token> expr_tokens;
+  Token t;
+  int paren_depth = 0;
+  int brace_depth = 0;
+  
+  // Read tokens until we hit a statement terminator
+  while (true) {
+    t = ts.get();
+    
+    if (t.is_symbol('(')) paren_depth++;
+    else if (t.is_symbol(')')) paren_depth--;
+    else if (t.is_symbol('{')) brace_depth++;
+    else if (t.is_symbol('}')) brace_depth--;
+    
+    // Stop at semicolon (print) when not inside parentheses or braces
+    if (t.kind == Token::id::print && paren_depth == 0 && brace_depth == 0) {
+      ts.unget(t);
+      break;
+    }
+    
+    expr_tokens.push_back(t);
+  }
+  
+  // Put tokens back in reverse order
+  for (auto it = expr_tokens.rbegin(); it != expr_tokens.rend(); ++it) {
+    ts.unget(*it);
+  }
+  
+  return tokens_to_string(expr_tokens);
 }
 
 // Añadido
@@ -539,16 +624,20 @@ gv evaluate_function(const string& fname, const vector<gv>& args)
   if (args.size() != fun.args.size())
     error("Wrong number of arguments in call to ", fname);
 
+  // ScopeGuard gestiona automáticamente la restauración de entorno y buffer
   ScopeGuard guard(names, ts);
 
+  // Crear variables locales para los parámetros
   for (size_t i = 0; i < args.size(); i++) {
     define_name(fun.args[i], args[i], false);
   }
 
+  // Inyectar tokens del cuerpo de la función en el buffer (en orden inverso)
   for (auto it = fun.body.rbegin(); it != fun.body.rend(); ++it) {
     ts.unget(*it);
   }
 
+  // Evaluar la expresión (ScopeGuard restaura todo automáticamente)
   return expression();
 }
 
@@ -670,12 +759,13 @@ gv assign()
 
   if(!t.is_symbol('=')) error("= missing in assign of " ,name);
 
+  string expr_str = capture_expression_string();
   gv v=expression();
 
   if(is_declared(name)) 
     set_value(name,v);
   else
-    define_name(name,v);
+    define_name(name,v,false,expr_str);
 
   return v;
 }
@@ -694,9 +784,10 @@ gv constant_assign()
 
   if(!t.is_symbol('=')) error("= missing in assign of " ,name);
 
+  string expr_str = capture_expression_string();
   gv v=expression();
 
-  define_name(name,v,true);
+  define_name(name,v,true,expr_str);
 
   return v;
 }
@@ -900,6 +991,17 @@ void help()
     <<"\n     { 366.000000, 732.000000, 1098.000000 }"
     <<"\n   } (a literal matrix assigned to a varible)"<<"\n"
     <<"\n"
+    <<"\n Matrix operations:"
+    <<"\n"
+    <<"\n   ~a; (calculates the inverse of matrix a)"
+    <<"\n   ~{{1,2},{3,4}}; (inverse of a matrix literal)"
+    <<"\n"
+    <<"\n User-defined functions:"
+    <<"\n"
+    <<"\n   f(x) = x^2 + 2*x + 1; (define a function with one parameter)"
+    <<"\n   g(x, y) = x*y + sin(x); (define a function with multiple parameters)"
+    <<"\n   f(5); (call a user-defined function)"
+    <<"\n"
     <<"\n Mind that all expressions should be finished with a symbol ';'."
     <<"\n For finishing the execution type \"quit\"."
     <<"\n"
@@ -907,6 +1009,9 @@ void help()
     <<"\n"
     <<"\n   precision; (shows how many fractional digits are used for showing calculator's results)"
     <<"\n   set precision <numeric_expression>; (changes calculator's precision)"
+    <<"\n   show env; (displays all variables and user-defined functions with their expressions)"
+    <<"\n   save env <filename>; (saves the current environment to a file)"
+    <<"\n   load env <filename>; (loads an environment from a file)"
     <<"\n"
   ; 
 }
@@ -945,7 +1050,11 @@ void show_env()
 {
   cout << "Environment variables:\n";
   for (const auto& kv : names) {
-    cout << "  " << kv.first << " = " << kv.second.value;
+    cout << "  " << kv.first;
+    if (!kv.second.expr.empty()) {
+      cout << " = " << kv.second.expr;
+    }
+    cout << "\n" << kv.second.value;
     if (kv.second.is_const) cout << " (const)";
     cout << "\n";
   }
@@ -958,7 +1067,11 @@ void show_env()
         if (i > 0) cout << ", ";
         cout << kv.second.args[i];
       }
-      cout << ")\n";
+      cout << ")";
+      if (!kv.second.body.empty()) {
+        cout << " = " << tokens_to_string(kv.second.body);
+      }
+      cout << "\n";
     }
   }
 }
