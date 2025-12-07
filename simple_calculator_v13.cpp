@@ -236,11 +236,11 @@ Token Token_stream::get()
       return Token(val);
     }
     default:
-    	if (isalpha(ch)) 
+    	if (isalpha(ch) || ch == '_') 
       {
         string s;
         s+=ch;
-        while(cin.get(ch) && (isalpha(ch) || isdigit(ch))) s+=ch;
+        while(cin.get(ch) && (isalpha(ch) || isdigit(ch) || ch == '_')) s+=ch;
         cin.unget();
 
         if(s=="quit") return Token(Token::id::quit);
@@ -298,12 +298,32 @@ struct Value
 // Añadido
 struct UserFunction {
   vector<string> args;
-  string body;
+  vector<Token> body;  // Cuerpo como secuencia de tokens
 };
 
 map<string, UserFunction> user_functions;
 
-
+// Añadido - Gestión de entorno con patrón RAII
+class ScopeGuard {
+private:
+  map<string, Value>& names_ref;
+  map<string, Value> backup;
+  deque<Token> saved_buffer;
+  Token_stream& ts_ref;
+  
+public:
+  ScopeGuard(map<string, Value>& names, Token_stream& ts)
+    : names_ref(names), backup(names), ts_ref(ts)
+  {
+    saved_buffer = ts_ref.save_buffer();
+    ts_ref.clear();
+  }
+  
+  ~ScopeGuard() {
+    ts_ref.restore_buffer(saved_buffer);
+    names_ref = backup;
+  }
+};
 
 map<string,Value> names;
 
@@ -348,6 +368,49 @@ constexpr int default_precision=6;
 int precision=default_precision;
 
 gv expression();
+// Añadido
+// Helper function to parse function arguments
+vector<gv> parse_arguments() {
+  vector<gv> args;
+  
+  Token t = ts.get();
+  if (!t.is_symbol(')')) {
+    ts.unget(t);
+    args.push_back(expression());
+    
+    while (true) {
+      Token comma = ts.get();
+      if (comma.is_symbol(')')) break;
+      if (!comma.is_symbol(',')) error("',' expected in argument list");
+      args.push_back(expression());
+    }
+  }
+  
+  return args;
+}
+
+// Añadido
+vector<string> parse_parameters() {
+  vector<string> params;
+  
+  Token t = ts.get();
+  if (!t.is_symbol(')')) {
+    if (t.kind != Token::id::name_token) error("parameter name expected");
+    params.push_back(t.name);
+    
+    while (true) {
+      Token comma = ts.get();
+      if (comma.is_symbol(')')) break;
+      if (!comma.is_symbol(',')) error("',' expected in parameter list");
+      
+      Token p = ts.get();
+      if (p.kind != Token::id::name_token) error("parameter name expected");
+      params.push_back(p.name);
+    }
+  }
+  
+  return params;
+}
 
 gv function_name()
 {
@@ -444,45 +507,21 @@ gv evaluate_function(const string& fname, const vector<gv>& args)
   if (args.size() != fun.args.size())
     error("Wrong number of arguments in call to ", fname);
 
-  // Guardar entorno actual
-  map<string, Value> backup = names;
-  
-  // Guardar buffer de tokens
-  auto saved_buffer = ts.save_buffer();
+  // ScopeGuard gestiona automáticamente la restauración de entorno y buffer
+  ScopeGuard guard(names, ts);
 
   // Crear variables locales para los parámetros
   for (size_t i = 0; i < args.size(); i++) {
     define_name(fun.args[i], args[i], false);
   }
 
-  // Preparar un stream con el cuerpo y guardar el buffer original de cin
-  stringstream ss(fun.body);
-  auto* old_buf = cin.rdbuf(ss.rdbuf());
-
-  ts.clear();
-
-  // Evaluar la expresión
-  gv result;
-  try {
-    result = expression();
-  } catch (...) {
-    // Asegurar que restauramos cin incluso si hay error
-    cin.rdbuf(old_buf);
-    ts.restore_buffer(saved_buffer);
-    names = backup;
-    throw;
+  // Inyectar tokens del cuerpo de la función en el buffer (en orden inverso)
+  for (auto it = fun.body.rbegin(); it != fun.body.rend(); ++it) {
+    ts.unget(*it);
   }
 
-  // Restaurar el buffer original de cin
-  cin.rdbuf(old_buf);
-  
-  // Restaurar buffer de tokens (elimina tokens del cuerpo de la función y recupera los originales)
-  ts.restore_buffer(saved_buffer);
-
-  // Restaurar entorno
-  names = backup;
-
-  return result;
+  // Evaluar la expresión (ScopeGuard restaura todo automáticamente)
+  return expression();
 }
 
 gv primary()
@@ -531,42 +570,20 @@ gv primary()
 
   // Añadido
   else if (t.kind == Token::id::name_token) {
-
     string fname = t.name;
     Token next = ts.get();
 
     if (next.is_symbol('(')) {
-      vector<gv> args;
-
-      Token x = ts.get();
+      // Llamada a función definida por usuario
+      vector<gv> args = parse_arguments();
       
-      if (!x.is_symbol(')')) {
-        ts.unget(x);
-        
-        args.push_back(expression());
-
-        while (true) {
-          Token comma = ts.get();
-          
-          if (comma.is_symbol(')')) {
-            break;
-          }
-          
-          if (!comma.is_symbol(',')) 
-            error("',' expected");
-          
-          args.push_back(expression());
-        }
-      }
-
-      
-      auto it = user_functions.find(fname);
-      if (it == user_functions.end())
+      if (user_functions.find(fname) == user_functions.end())
         error("Undefined function: ", fname);
 
       return evaluate_function(fname, args);
     }
 
+    // Variable
     ts.unget(next);
     return get_value(fname);
   }
@@ -660,37 +677,30 @@ gv constant_assign()
 void define_function()
 {
   Token t = ts.get();
+  if (t.kind != Token::id::name_token) error("function name expected");
   string fname = t.name;
 
   Token lp = ts.get();
   if (!lp.is_symbol('(')) error("'(' expected in function definition");
 
-  vector<string> params;
-  Token p = ts.get();
-
-  if (!p.is_symbol(')')) {
-    if (p.kind != Token::id::name_token) error("parameter name expected");
-    params.push_back(p.name);
-
-    while (true) {
-      Token comma = ts.get();
-      if (comma.is_symbol(')')) break;
-      if (!comma.is_symbol(',')) error("',' expected");
-
-      Token p2 = ts.get();
-      if (p2.kind != Token::id::name_token) error("parameter name expected");
-      params.push_back(p2.name);
-    }
-  }
+  vector<string> params = parse_parameters();
 
   Token eq = ts.get();
   if (!eq.is_symbol('=')) error("'=' expected in function definition");
 
-    string body;
-    getline(cin, body, ';');
-    body += ";";
+  // Tokenizar el cuerpo de la función
+  vector<Token> body_tokens;
+  Token tok = ts.get();
+  
+  while (tok.kind != Token::id::print) {  // Hasta encontrar ';'
+    body_tokens.push_back(tok);
+    tok = ts.get();
+  }
+  
+  // Agregar el token de print (';') al final
+  body_tokens.push_back(tok);
 
-  user_functions[fname] = UserFunction{params, body};
+  user_functions[fname] = UserFunction{params, body_tokens};
 }
 
 
@@ -713,60 +723,52 @@ gv statement()
       Token name = t;
       Token next = ts.get();
 
-      // ------ CASO 1: f( ... ) ------
+      // CASO 1: f(...) = ... (definición de función)
       if (next.is_symbol('(')) {
-          
-        // Consumimos hasta el paréntesis de cierre SOLO para inspección
+        // Mirar si es definición consumiendo tokens
+        vector<Token> lookahead;
+        lookahead.push_back(next);
+        
         int level = 1;
-        vector<Token> args;
-        args.push_back(next);
-
         while (level > 0) {
           Token x = ts.get();
-          args.push_back(x);
+          lookahead.push_back(x);
           if (x.is_symbol('(')) level++;
           else if (x.is_symbol(')')) level--;
         }
-
-        // Miramos el token que viene después de los parámetros
+        
         Token after = ts.get();
-
-        cout << "[DEBUG AFTER] kind=" << after.kind << " symbol=" << after.symbol << endl;
-
-
-        // ------ DEFINICIÓN ------
+        
         if (after.is_symbol('=')) {
-
-          // Restauramos todo en orden inverso
+          // Es definición: restaurar y delegar
           ts.unget(after);
-          for (auto it = args.rbegin(); it != args.rend(); ++it) ts.unget(*it);
+          for (auto it = lookahead.rbegin(); it != lookahead.rend(); ++it) 
+            ts.unget(*it);
           ts.unget(name);
-
           define_function();
           return gv(0.0);
         }
-
-        // ------ LLAMADA ------
+        
+        // Es llamada/expresión: restaurar y delegar
         ts.unget(after);
-        for (auto it = args.rbegin(); it != args.rend(); ++it) ts.unget(*it);
+        for (auto it = lookahead.rbegin(); it != lookahead.rend(); ++it) 
+          ts.unget(*it);
         ts.unget(name);
-
         return expression();
       }
 
-      // ------ CASO 2: x = ... ------
+      // CASO 2: x = ... (asignación)
       if (next.is_symbol('=')) {
         ts.unget(next);
         ts.unget(name);
         return assign();
       }
 
-      // ------ CASO 3: Nombre como expresión ------
+      // CASO 3: expresión simple
       ts.unget(next);
       ts.unget(name);
       return expression();
     }
-
     break;
 
 
