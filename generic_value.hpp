@@ -27,6 +27,8 @@
       virtual generic_value_interface* make_copy() const =0;
 
       virtual generic_value_interface* make_transpose() const =0;
+      // Añadido
+      virtual generic_value_interface* make_inverse() const =0;
       virtual generic_value_interface* make_negative() const =0;
       
       virtual bool equal(const generic_value_interface* v) const =0;
@@ -120,6 +122,16 @@
 
         generic_value gv;
         gv.ptr__=ptr__->make_transpose(); 
+        return gv; 
+      }
+
+      // Añadido
+      generic_value operator!() const 
+      { 
+        throw_if_nullptr__();
+
+        generic_value gv;
+        gv.ptr__=ptr__->make_inverse(); 
         return gv; 
       }
 
@@ -256,6 +268,12 @@
       { return new scalar_value(value); }
 
       interface_t* make_transpose() const override { return new scalar_t{value}; }
+      // Añadido
+      interface_t* make_inverse() const override 
+      { 
+        if(value == 0) throw logic_error("cannot invert zero!");
+        return new scalar_t{element_t(1)/value}; 
+      }
       interface_t* make_negative() const override { return new scalar_t{-value}; }
       
       bool equal(const interface_t* v) const override
@@ -397,6 +415,8 @@
       { return new matrix_value(value); }
 
       interface_t* make_transpose() const override { return new matrix_t{~value}; }
+      // Añadido
+      interface_t* make_inverse() const override { return new matrix_t{!value}; }
       interface_t* make_negative() const override { return new matrix_t{-value}; }
 
       bool equal(const interface_t* v) const override
@@ -523,6 +543,3 @@
   };
 
 #endif // GENERIC_VALUE_HPP
-
-
-

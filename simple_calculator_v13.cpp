@@ -207,6 +207,7 @@ Token Token_stream::get()
 
   switch (ch) 
   {
+    case '!': 
     case '(': case ')': 
     case '{': case '}':
     case '+': case '-': 
@@ -560,6 +561,7 @@ gv primary()
     else if(t.is_symbol('-')) return -primary();
     else if(t.is_symbol('+')) return primary();
     else if(t.is_symbol('~')) return ~primary();
+    else if(t.is_symbol('!')) return !primary();
   }
   else if(t.kind==Token::id::number) return gv(t.value);
 

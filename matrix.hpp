@@ -153,17 +153,18 @@
         matrix make_transpose() const
         {
           matrix t(columns__,rows__);
-  
+
           for(size_t i=0; i<t.rows(); i++)
             for(size_t j=0; j<t.columns(); j++)
               t[i][j]=elements__[offset__(j,i)];
-  
+
           return t;
         }
-  
-        void save_as(const string& file_name) const;
-  
-      private:
+
+        // Añadido
+        matrix make_inverse() const;
+
+        void save_as(const string& file_name) const;      private:
   
         size_t rows__;
         size_t columns__; 
@@ -353,6 +354,96 @@
       return *this;
     }
   
+    // Añadido
+    template<typename T>
+    matrix<T> matrix<T>::make_inverse() const
+    {
+      if(rows__ != columns__)
+      {
+        ostringstream str_stream;
+        str_stream<<"matrix is not square! cannot compute inverse ("
+          <<__func__<<"() in "<<__FILE__<<":"<<__LINE__<<")";
+        throw invalid_argument(str_stream.str());
+      }
+
+      size_t n = rows__;
+      
+      // Create augmented matrixf [A|I]
+      matrix<T> augmented(n, 2*n);
+      
+      // Copy original matrix to left side
+      for(size_t i=0; i<n; i++)
+        for(size_t j=0; j<n; j++)
+          augmented[i][j] = elements__[offset__(i,j)];
+      
+      // Set identity magtrix on right side
+      for(size_t i=0; i<n; i++)
+        for(size_t j=n; j<2*n; j++)
+          augmented[i][j] = (i == (j-n)) ? 1 : 0;
+      
+      // Gauss-Jordan elimination
+      for(size_t pivot=0; pivot<n; pivot++)
+      {
+        // Find pivot
+        size_t max_row = pivot;
+        element_t max_val = abs(augmented[pivot][pivot]);
+        
+        for(size_t i=pivot+1; i<n; i++)
+        {
+          element_t val = abs(augmented[i][pivot]);
+          if(val > max_val)
+          {
+            max_val = val;
+            max_row = i;
+          }
+        }
+        
+        // Check if mathrix is singular
+        if(abs(augmented[max_row][pivot]) < 1e-10)
+        {
+          ostringstream str_stream;
+          str_stream<<"matrix is singular! cannot compute inverse ("
+            <<__func__<<"() in "<<__FILE__<<":"<<__LINE__<<")";
+          throw invalid_argument(str_stream.str());
+        }
+        
+        // hSwap rows if needed
+        if(max_row != pivot)
+        {
+          for(size_t j=0; j<2*n; j++)
+          {
+            element_t temp = augmented[pivot][j];
+            augmented[pivot][j] = augmented[max_row][j];
+            augmented[max_row][j] = temp;
+          }
+        }
+        
+        // Scale pivot row
+        element_t pivot_val = augmented[pivot][pivot];
+        for(size_t j=0; j<2*n; j++)
+          augmented[pivot][j] /= pivot_val;
+        
+        // Eliminate column
+        for(size_t i=0; i<n; i++)
+        {
+          if(i != pivot)
+          {
+            element_t factor = augmented[i][pivot];
+            for(size_t j=0; j<2*n; j++)
+              augmented[i][j] -= factor * augmented[pivot][j];
+          }
+        }
+      }
+      
+      // Extract inverse matrix from right sidee
+      matrix<T> inverse(n, n);
+      for(size_t i=0; i<n; i++)
+        for(size_t j=0; j<n; j++)
+          inverse[i][j] = augmented[i][j+n];
+      
+      return inverse;
+    }
+
     template<typename T>
     void matrix<T>::save_as(const string& file_name) const
     {
@@ -364,16 +455,14 @@
           <<__func__<<"() in "<<__FILE__<<":"<<__LINE__<<")";
         throw logic_error(str_stream.str());
       }
-  
+
       ofs<<rows__<<" "<<columns__<<"\n";
       for(size_t i=0; i<rows__; i++)
       {
         for(size_t j=0; j<columns__; j++) ofs<<elements__[offset__(i,j)]<<" ";
         ofs<<"\n";
       }
-    }
-  
-    template<typename T>
+    }    template<typename T>
     matrix<T> operator+(const matrix<T>& a, const matrix<T>& b)
     {
       if((a.rows()!=b.rows()) || (a.columns()!=b.columns())) 
@@ -405,19 +494,21 @@
   
     template<typename T>
     inline matrix<T> operator~(const matrix<T>& m) { return m.make_transpose(); }
-  
+
+    // Añadido
+    template<typename T>
+    inline matrix<T> operator!(const matrix<T>& m) { return m.make_inverse(); }
+
     template<typename T>
     inline matrix<T> operator-(const matrix<T>& m)
     {
       matrix<T> r{m}; 
-  
+
       for(size_t i=0; i<r.rows(); i++)
         for(size_t j=0; j<r.columns(); j++) r[i][j]=-m[i][j];
-  
+
       return r; 
-    }
-  
-    template<typename T>
+    }    template<typename T>
     matrix<T> operator*(const matrix<T>& a, const matrix<T>& b)
     {
       if(a.columns()!=b.rows())
