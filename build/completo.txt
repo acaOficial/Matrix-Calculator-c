@@ -1,0 +1,44 @@
+VARS 8
+VAR A 0
+MATRIX 2 2
+2 1
+1 1
+VAR B 0
+MATRIX 2 2
+4 7
+2 6
+VAR M 0
+MATRIX 3 3
+3 0 2
+2 0 -2
+0 1 1
+VAR inv_A 0
+MATRIX 2 2
+1 -1
+-1 2
+VAR inv_M 0
+MATRIX 3 3
+0.2 0.2 0
+-0.2 0.3 1
+0.2 -0.3 -0
+VAR pi 1
+SCALAR 3.14159
+VAR x 0
+SCALAR 5
+VAR y 0
+SCALAR 10.5
+FUNCS 2
+FNAME cuadrado
+ARGS 1 n
+BODY 4
+4 n
+6 *
+4 n
+2 0
+FNAME suma
+ARGS 2 a b
+BODY 4
+4 a
+6 +
+4 b
+2 0
