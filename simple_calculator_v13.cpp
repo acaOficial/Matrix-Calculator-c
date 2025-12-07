@@ -304,12 +304,12 @@ struct Value
 };
 
 // Añadido
-struct UserFunction {
+struct function {
   vector<string> args;
   vector<Token> body;
 };
 
-map<string, UserFunction> user_functions;
+map<string, function> functions;
 
 // Añadido
 class ScopeGuard {
@@ -533,11 +533,11 @@ gv columns()
 // Añadido
 gv evaluate_function(const string& fname, const vector<gv>& args) 
 {
-  auto it = user_functions.find(fname);
-  if (it == user_functions.end())
+  auto it = functions.find(fname);
+  if (it == functions.end())
     error("Undefined function: ", fname);
 
-  const UserFunction& fun = it->second;
+  const function& fun = it->second;
 
   if (args.size() != fun.args.size())
     error("Wrong number of arguments in call to ", fname);
@@ -613,7 +613,7 @@ gv primary()
       // Llamada a función definida por usuario
       vector<gv> args = parse_arguments();
       
-      if (user_functions.find(fname) == user_functions.end())
+      if (functions.find(fname) == functions.end())
         error("Undefined function: ", fname);
 
       return evaluate_function(fname, args);
@@ -735,7 +735,7 @@ void define_function()
   
   body_tokens.push_back(tok);
 
-  user_functions[fname] = UserFunction{params, body_tokens};
+  functions[fname] = function{params, body_tokens};
 }
 
 
@@ -958,9 +958,9 @@ void show_env()
     cout << "\n";
   }
   
-  if (!user_functions.empty()) {
+  if (!functions.empty()) {
     cout << "\nUser-defined functions:\n";
-    for (const auto& kv : user_functions) {
+    for (const auto& kv : functions) {
       cout << "  " << kv.first << "(";
       for (size_t i = 0; i < kv.second.args.size(); i++) {
         if (i > 0) cout << ", ";
@@ -978,23 +978,18 @@ void save_env_to_file(const string& fname)
   ofstream out(fname);
   if (!out) error("Cannot open file for saving: ", fname);
 
-  // Guardar número de variables
   out << "VARS " << names.size() << "\n";
   
-  // Guardar variables
   for (const auto& kv : names) {
     out << "VAR " << kv.first << " " << kv.second.is_const << "\n";
     
-    // Detectar si es escalar o matriz
     gv temp_value = kv.second.value;
     
     try {
-      // Intentar como escalar
       double scalar = temp_value.get<gv::scalar_t>();
       out << "SCALAR " << scalar << "\n";
     }
     catch (...) {
-      // Es una matriz
       try {
         auto matrix = temp_value.get<gv::matrix_t>();
         out << "MATRIX " << matrix.rows() << " " << matrix.columns() << "\n";
@@ -1013,11 +1008,9 @@ void save_env_to_file(const string& fname)
     }
   }
   
-  // Guardar número de funciones
-  out << "FUNCS " << user_functions.size() << "\n";
+  out << "FUNCS " << functions.size() << "\n";
   
-  // Guardar funciones
-  for (const auto& kv : user_functions) {
+  for (const auto& kv : functions) {
     out << "FNAME " << kv.first << "\n";
     out << "ARGS " << kv.second.args.size();
     for (const auto& arg : kv.second.args) {
@@ -1025,7 +1018,6 @@ void save_env_to_file(const string& fname)
     }
     out << "\n";
     
-    // Guardar cuerpo de la función (serializar tokens)
     out << "BODY " << kv.second.body.size() << "\n";
     for (const auto& token : kv.second.body) {
       out << static_cast<int>(token.kind) << " ";
@@ -1042,7 +1034,7 @@ void save_env_to_file(const string& fname)
           out << token.name;
           break;
         default:
-          out << "0"; // placeholder para otros tipos
+          out << "0";
           break;
       }
       out << "\n";
@@ -1172,7 +1164,7 @@ void load_env_from_file(const string& fname)
       body.push_back(tok);
     }
     
-    user_functions[func_name] = UserFunction{args, body};
+    functions[func_name] = function{args, body};
   }
 }
 
