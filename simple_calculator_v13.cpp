@@ -433,7 +433,7 @@ gv columns()
 }
 
 // Añadido
-gv evaluate_user_function_call(const string& fname, const vector<gv>& args) 
+gv evaluate_function(const string& fname, const vector<gv>& args) 
 {
   auto it = user_functions.find(fname);
   if (it == user_functions.end())
@@ -535,9 +535,6 @@ gv primary()
     string fname = t.name;
     Token next = ts.get();
 
-    // ------------------------------
-    // LLAMADA A FUNCIÓN DEFINIDA POR USUARIO
-    // ------------------------------
     if (next.is_symbol('(')) {
       vector<gv> args;
 
@@ -567,7 +564,7 @@ gv primary()
       if (it == user_functions.end())
         error("Undefined function: ", fname);
 
-      return evaluate_user_function_call(fname, args);
+      return evaluate_function(fname, args);
     }
 
     ts.unget(next);
@@ -613,23 +610,6 @@ gv expression()
   }
 }
 
-
-// Añadido
-
-bool is_user_function_definition(Token t)
-{
-  if (t.kind != Token::id::name_token) return false;
-
-  Token next = ts.get();
-  if (!next.is_symbol('(')) { 
-      ts.unget(next);
-      return false; 
-  }
-
-  ts.unget(next);
-  ts.unget(t);
-  return true;
-}
 
 gv assign()
 {
@@ -677,8 +657,7 @@ gv constant_assign()
 }
 
 // Añadido
-
-void define_user_function()
+void define_function()
 {
   Token t = ts.get();
   string fname = t.name;
@@ -723,7 +702,6 @@ gv statement()
   #endif // DEBUG_FUNC
          
   Token t=ts.get();
-
   switch(t.kind)
   {
     case Token::id::const_token:
@@ -732,65 +710,68 @@ gv statement()
 
     case Token::id::name_token:
     {
-        Token name = t;
-        Token next = ts.get();
+      Token name = t;
+      Token next = ts.get();
 
-        // ------ CASO 1: f( ... ) ------
-        if (next.is_symbol('(')) {
-            
-            // Consumimos hasta el paréntesis de cierre SOLO para inspección
-            int level = 1;
-            vector<Token> args;
-            args.push_back(next);
+      // ------ CASO 1: f( ... ) ------
+      if (next.is_symbol('(')) {
+          
+        // Consumimos hasta el paréntesis de cierre SOLO para inspección
+        int level = 1;
+        vector<Token> args;
+        args.push_back(next);
 
-            while (level > 0) {
-                Token x = ts.get();
-                args.push_back(x);
-                if (x.is_symbol('(')) level++;
-                else if (x.is_symbol(')')) level--;
-            }
-
-            // Miramos el token que viene después de los parámetros
-            Token after = ts.get();
-
-            // ------ DEFINICIÓN ------
-            if (after.is_symbol('=')) {
-
-                // Restauramos todo en orden inverso
-                ts.unget(after);
-                for (auto it = args.rbegin(); it != args.rend(); ++it) ts.unget(*it);
-                ts.unget(name);
-
-                define_user_function();
-                return gv(0.0);
-            }
-
-            // ------ LLAMADA ------
-            ts.unget(after);
-            for (auto it = args.rbegin(); it != args.rend(); ++it) ts.unget(*it);
-            ts.unget(name);
-
-            return expression();
+        while (level > 0) {
+          Token x = ts.get();
+          args.push_back(x);
+          if (x.is_symbol('(')) level++;
+          else if (x.is_symbol(')')) level--;
         }
 
-        // ------ CASO 2: x = ... ------
-        if (next.is_symbol('=')) {
-            ts.unget(next);
-            ts.unget(name);
-            return assign();
+        // Miramos el token que viene después de los parámetros
+        Token after = ts.get();
+
+        cout << "[DEBUG AFTER] kind=" << after.kind << " symbol=" << after.symbol << endl;
+
+
+        // ------ DEFINICIÓN ------
+        if (after.is_symbol('=')) {
+
+          // Restauramos todo en orden inverso
+          ts.unget(after);
+          for (auto it = args.rbegin(); it != args.rend(); ++it) ts.unget(*it);
+          ts.unget(name);
+
+          define_function();
+          return gv(0.0);
         }
 
-        // ------ CASO 3: Nombre como expresión ------
+        // ------ LLAMADA ------
+        ts.unget(after);
+        for (auto it = args.rbegin(); it != args.rend(); ++it) ts.unget(*it);
+        ts.unget(name);
+
+        return expression();
+      }
+
+      // ------ CASO 2: x = ... ------
+      if (next.is_symbol('=')) {
         ts.unget(next);
         ts.unget(name);
-        return expression();
+        return assign();
+      }
+
+      // ------ CASO 3: Nombre como expresión ------
+      ts.unget(next);
+      ts.unget(name);
+      return expression();
     }
 
     break;
 
 
     default:
-      { ts.unget(t); return expression(); }
+    { ts.unget(t); return expression(); }
   }
 }
 
