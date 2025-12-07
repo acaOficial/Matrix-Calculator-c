@@ -99,7 +99,6 @@
 #include <map>
 #include <iomanip>
 #include <ios>
-#include <fstream>
 using namespace std;
 
 #include "generic_value.hpp"
@@ -382,7 +381,7 @@ void show_env();
 void save_env_to_file(const string& fname);
 void load_env_from_file(const string& fname);
 
-// Función auxiliar para leer nombres de archivo (permite puntos y otros caracteres)
+
 string read_filename()
 {
   string filename;
@@ -752,13 +751,12 @@ gv statement()
       return constant_assign();
       break;
 
-    // Añadido
     case Token::id::name_token:
     {
       Token name = t;
       Token next = ts.get();
 
-      // Detecciñon de definiciónd e funcione
+      // definición de función
       if (next.is_symbol('(')) {
         vector<Token> lookahead;
         lookahead.push_back(next);
@@ -947,6 +945,7 @@ void set_precision()
   ;
 }
 
+
 // Añadido
 void show_env() 
 {
@@ -982,10 +981,34 @@ void save_env_to_file(const string& fname)
   
   // Guardar variables
   for (const auto& kv : names) {
+    out << "VAR " << kv.first << " " << kv.second.is_const << "\n";
+    
+    // Detectar si es escalar o matriz
     gv temp_value = kv.second.value;
-    out << kv.first << " "
-        << temp_value.get<gv::scalar_t>() << " "
-        << kv.second.is_const << "\n";
+    
+    try {
+      // Intentar como escalar
+      double scalar = temp_value.get<gv::scalar_t>();
+      out << "SCALAR " << scalar << "\n";
+    }
+    catch (...) {
+      // Es una matriz
+      try {
+        auto matrix = temp_value.get<gv::matrix_t>();
+        out << "MATRIX " << matrix.rows() << " " << matrix.columns() << "\n";
+        
+        for (size_t i = 0; i < matrix.rows(); i++) {
+          for (size_t j = 0; j < matrix.columns(); j++) {
+            out << matrix[i][j];
+            if (j < matrix.columns() - 1) out << " ";
+          }
+          out << "\n";
+        }
+      }
+      catch (...) {
+        error("Cannot serialize value for: ", kv.first);
+      }
+    }
   }
   
   // Guardar número de funciones
@@ -1041,11 +1064,35 @@ void load_env_from_file(const string& fname)
   in >> num_vars;
   
   for (size_t i = 0; i < num_vars; i++) {
-    string name;
-    double val;
+    in >> keyword;
+    if (keyword != "VAR") error("Invalid file format: expected VAR");
+    
+    string var_name;
     int is_const;
-    in >> name >> val >> is_const;
-    define_name(name, gv(val), is_const != 0);
+    in >> var_name >> is_const;
+    
+    in >> keyword;
+    if (keyword == "SCALAR") {
+      double val;
+      in >> val;
+      define_name(var_name, gv(val), is_const != 0);
+    }
+    else if (keyword == "MATRIX") {
+      size_t rows, cols;
+      in >> rows >> cols;
+      
+      vector<vector<double>> matrix_data(rows, vector<double>(cols));
+      for (size_t r = 0; r < rows; r++) {
+        for (size_t c = 0; c < cols; c++) {
+          in >> matrix_data[r][c];
+        }
+      }
+      
+      define_name(var_name, gv(typename gv::matrix_t::value_t(matrix_data)), is_const != 0);
+    }
+    else {
+      error("Invalid file format: expected SCALAR or MATRIX");
+    }
   }
   
   // Cargar funciones
