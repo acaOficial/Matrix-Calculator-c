@@ -213,6 +213,7 @@ Token Token_stream::get()
 
   switch (ch) 
   {
+    // Añadido
     case '!': 
     case '(': case ')': 
     case '{': case '}':
@@ -988,6 +989,14 @@ void help()
     <<"\n"
     <<"\n Mind that all expressions should be finished with a symbol ';'."
     <<"\n For finishing the execution type \"quit\"."
+    <<"\n"
+    <<"\n Matrix operators:"
+    <<"\n"
+    <<"\n   ~A; (transpose of matrix A)"
+    <<"\n   ~{{1,2},{3,4}}; (transpose of a matrix literal)"
+    <<"\n"
+    <<"\n   !A; (inverse of matrix A, only if square and non-singular)"
+    <<"\n   !{{1,2},{3,4}}; (inverse of a matrix literal)"
     <<"\n"
     <<"\n Additional commands: "
     <<"\n"

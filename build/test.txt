@@ -1,0 +1,28 @@
+VARS 4
+VAR a 0
+SCALAR 5
+VAR m 0
+MATRIX 3 2
+1 2
+3 4
+5 6
+VAR pi 1
+SCALAR 3.14159
+VAR v 0
+MATRIX 1 3
+1 2 3
+FUNCS 2
+FNAME f
+ARGS 1 x
+BODY 4
+4 x
+6 *
+4 x
+2 0
+FNAME g
+ARGS 2 x y
+BODY 4
+4 x
+6 +
+4 y
+2 0
