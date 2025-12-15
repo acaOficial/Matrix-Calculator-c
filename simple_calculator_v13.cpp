@@ -1047,7 +1047,7 @@ void show_env()
     if (!kv.second.expr.empty()) {
       cout << " = " << kv.second.expr;
     }
-    cout << "\n" << kv.second.value;
+    // cout << "\n" << kv.second.value;
     if (kv.second.is_const) cout << " (const)";
     cout << "\n";
   }
