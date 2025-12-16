@@ -296,12 +296,11 @@ struct Value
   string name;
   gv value;
   bool is_const;
-  string expr;  // Expression string
 
-  Value() :name{}, value{double(0)}, is_const{false}, expr{} {}
+  Value() :name{}, value{double(0)}, is_const{false} {}
 
-  Value(const string& n, const gv& v, bool is_constant=false, const string& expression="") 
-    :name(n), value(v), is_const(is_constant), expr(expression) 
+  Value(const string& n, const gv& v, bool is_constant=false) 
+    :name(n), value(v), is_const(is_constant) 
   {}
 };
 
@@ -369,8 +368,8 @@ bool is_constant(const string& s)
 
 bool is_declared(const string& s) { return (names.find(s)!=names.end()); }
 
-void define_name(const string& s, const gv& d, bool constant=false, const string& expr="")
-{ names[s]=Value(s,d,constant,expr); }
+void define_name(const string& s, const gv& d, bool constant=false)
+{ names[s]=Value(s,d,constant); }
 
 Token_stream ts;
 
@@ -383,7 +382,6 @@ gv expression();
 void show_env();
 void save_env_to_file(const string& fname);
 void load_env_from_file(const string& fname);
-string capture_expression_string();
 string tokens_to_string(const vector<Token>& tokens);
 
 
@@ -448,37 +446,6 @@ string tokens_to_string(const vector<Token>& tokens) {
     }
   }
   return oss.str();
-}
-
-// Añadido
-string capture_expression_string() {
-  vector<Token> expr_tokens;
-  Token t;
-  int paren_depth = 0;
-  int brace_depth = 0;
-  
-  while (true) {
-    t = ts.get();
-    
-    if (t.is_symbol('(')) paren_depth++;
-    else if (t.is_symbol(')')) paren_depth--;
-    else if (t.is_symbol('{')) brace_depth++;
-    else if (t.is_symbol('}')) brace_depth--;
-    
-    if (t.kind == Token::id::print && paren_depth == 0 && brace_depth == 0) {
-      ts.unget(t);
-      break;
-    }
-    
-    expr_tokens.push_back(t);
-  }
-  
-  // Put tokens back in reverse order
-  for (auto it = expr_tokens.rbegin(); it != expr_tokens.rend(); ++it) {
-    ts.unget(*it);
-  }
-  
-  return tokens_to_string(expr_tokens);
 }
 
 // Añadido
@@ -750,13 +717,12 @@ gv assign()
 
   if(!t.is_symbol('=')) error("= missing in assign of " ,name);
 
-  string expr_str = capture_expression_string();
   gv v=expression();
 
   if(is_declared(name)) 
     set_value(name,v);
   else
-    define_name(name,v,false,expr_str);
+    define_name(name,v,false);
 
   return v;
 }
@@ -775,10 +741,9 @@ gv constant_assign()
 
   if(!t.is_symbol('=')) error("= missing in assign of " ,name);
 
-  string expr_str = capture_expression_string();
   gv v=expression();
 
-  define_name(name,v,true,expr_str);
+  define_name(name,v,true);
 
   return v;
 }
@@ -1043,11 +1008,7 @@ void show_env()
 {
   cout << "Environment variables:\n";
   for (const auto& kv : names) {
-    cout << "  " << kv.first;
-    if (!kv.second.expr.empty()) {
-      cout << " = " << kv.second.expr;
-    }
-    cout << "\n" << kv.second.value;
+    cout << "  " << kv.first << " = " << kv.second.value;
     if (kv.second.is_const) cout << " (const)";
     cout << "\n";
   }
